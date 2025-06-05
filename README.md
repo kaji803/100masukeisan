@@ -1,1 +1,386 @@
-# 100masukeisan
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>１００マス計算</title>
+  <style>
+    body {
+      font-family: "Arial", "メイリオ", sans-serif;
+      background-color: #f2f2f2;
+      color: #333;
+      text-align: center;
+      margin: 0;
+      padding: 0;
+    }
+    h1 {
+      background-color: #0066cc;
+      color: white;
+      padding: 10px;
+      margin: 0;
+    }
+    .controls {
+      margin: 10px;
+    }
+    .controls select {
+      font-size: 18px;
+      padding: 5px;
+    }
+    .container {
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      padding: 10px;
+    }
+    .grid-container {
+      display: grid;
+      grid-template-columns: repeat(11, 50px);
+      grid-template-rows: repeat(11, 50px);
+      gap: 2px;
+      margin-right: 20px;
+      margin-bottom: 10px;
+    }
+    .grid-container .label {
+      background-color: #e0f0ff;
+      font-weight: bold;
+      font-size: 24px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      border: 1px solid #ccc;
+    }
+    .grid-container .cell {
+      width: 48px;
+      height: 48px;
+      font-size: 20px;
+      text-align: center;
+      line-height: 48px;
+      border: 1px solid #ccc;
+      background-color: white;
+      user-select: none;
+    }
+    .keypad {
+      display: grid;
+      grid-template-columns: repeat(3, 100px);
+      grid-template-rows: repeat(4, 1fr);
+      gap: 10px;
+      margin-top: 10px;
+      height: 550px;
+    }
+    .keypad button {
+      font-size: 28px;
+      border-radius: 8px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+    }
+    .keypad button:hover {
+      background-color: #45a049;
+    }
+    .stats {
+      width: 100%;
+      padding: 10px;
+    }
+    canvas {
+      max-width: 100%;
+      height: 550px !important;
+    }
+#start-container {
+  text-align: center;
+  margin: 10px;
+}
+
+#start-button {
+  font-size: 24px;
+  padding: 10px 30px;
+  background-color: #007BFF;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+ .cell.selected {
+    background-color: #d0ebff !important; /* 入力中のマスを目立たせる色 */
+  }
+
+  </style>
+</head>
+<body>
+  <h1>１００マス計算</h1>
+  <div class="controls">
+    <label for="mode">計算種別: </label>
+    <select id="mode" onchange="changeMode(this.value)">
+      <option value="add">たし算</option>
+      <option value="sub">ひき算</option>
+      <option value="mul">かけ算</option>
+    </select>
+  </div>
+<!-- スタートボタン -->
+<div id="start-container">
+  <button id="start-button">スタート</button>
+</div>
+
+  <div class="container">
+    <div id="grid" class="grid-container"></div>
+    <div>
+      <div class="keypad" id="keypad"></div>
+    </div>
+  </div>
+  <div class="stats">
+    <p id="timer">残り時間: 180 秒</p>
+    <p id="page">ページ: 1 / 5</p>
+    <p id="score">正解数: 0</p>
+    <canvas id="chart"></canvas>
+  </div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  const grid = document.getElementById("grid");
+  const keypad = document.getElementById("keypad");
+  const timerEl = document.getElementById("timer");
+  const scoreEl = document.getElementById("score");
+  const pageEl = document.getElementById("page");
+  const chartEl = document.getElementById("chart");
+  const modeSelector = document.getElementById("mode");
+
+  let timeLeft = 180, timer, currentPage = 1, totalPages = 5;
+  let mode = "add";
+  let rowHeaders = shuffle([...Array(10).keys()]);
+  let colHeaders = shuffle([...Array(10).keys()]);
+  let currentInputIndex = 0, correctCount = 0;
+  let cells = [], currentAnswer = "";
+
+  function shuffle(array) {
+    return array.sort(() => Math.random() - 0.5);
+  }
+
+  function changeMode(newMode) {
+    mode = newMode;
+    currentPage = 1;
+    correctCount = 0;
+    timeLeft = 180;
+    clearInterval(timer);
+    startGame();
+  }
+
+  function startGame() {
+    if (mode === "sub") {
+      colHeaders = shuffle([...Array(10).keys()].map(n => n + 10));
+      rowHeaders = shuffle([...Array(10).keys()]);
+    } else {
+      colHeaders = shuffle([...Array(10).keys()]);
+      rowHeaders = shuffle([...Array(10).keys()]);
+    }
+
+    buildGrid();
+    currentInputIndex = 0;
+    correctCount = 0;
+    timeLeft = 180;
+    timerEl.textContent = `残り時間: ${timeLeft} 秒`;
+    scoreEl.textContent = `正解数: 0`;
+    pageEl.textContent = `ページ: ${currentPage} / ${totalPages}`;
+    drawChart();
+  }
+
+  function buildGrid() {
+    grid.innerHTML = "";
+    cells = [];
+    for (let i = 0; i < 11; i++) {
+      for (let j = 0; j < 11; j++) {
+        const div = document.createElement("div");
+        if (i === 0 && j === 0) {
+          div.className = "label";
+          div.textContent = mode === "add" ? "+" : mode === "sub" ? "−" : "×";
+        } else if (i === 0) {
+          div.className = "label";
+          div.textContent = colHeaders[j - 1];
+        } else if (j === 0) {
+          div.className = "label";
+          div.textContent = rowHeaders[i - 1];
+        } else {
+          div.className = "cell";
+          div.dataset.row = i - 1;
+          div.dataset.col = j - 1;
+          div.dataset.enabled = "false";
+          div.onclick = () => {
+            if (div.dataset.enabled !== "true") return;
+            currentInputIndex = cells.indexOf(div);
+            currentAnswer = "";
+            updateCurrentCellDisplay();
+          };
+          cells.push(div);
+        }
+        grid.appendChild(div);
+      }
+    }
+    updateCurrentCellDisplay();
+  }
+
+  function updateCurrentCellDisplay() {
+    cells.forEach(cell => cell.classList.remove("selected"));
+    const cell = cells[currentInputIndex];
+    if (cell) {
+      cell.classList.add("selected");
+      cell.textContent = currentAnswer;
+    }
+  }
+
+  function startTimer() {
+    timer = setInterval(() => {
+      timeLeft--;
+      timerEl.textContent = `残り時間: ${timeLeft} 秒`;
+      if (timeLeft <= 0) {
+        clearInterval(timer);
+        finishGame();
+      }
+    }, 1000);
+  }
+
+  function nextInput() {
+    const cell = cells[currentInputIndex];
+    const row = rowHeaders[cell.dataset.row];
+    const col = colHeaders[cell.dataset.col];
+    let result = mode === "add" ? row + col : mode === "sub" ? col - row : row * col;
+
+    if (parseInt(currentAnswer) === result) {
+      correctCount++;
+      scoreEl.textContent = `正解数: ${correctCount}`;
+    }
+
+    cell.textContent = currentAnswer;
+    currentInputIndex++;
+    currentAnswer = "";
+    if (currentInputIndex < cells.length) {
+      updateCurrentCellDisplay();
+    } else {
+      if (currentPage < totalPages) {
+        currentPage++;
+        pageEl.textContent = `ページ: ${currentPage} / ${totalPages}`;
+        startGame();
+      } else {
+        finishGame();
+      }
+    }
+  }
+
+  function checkAndMoveIfCorrect() {
+    const cell = cells[currentInputIndex];
+    const row = rowHeaders[cell.dataset.row];
+    const col = colHeaders[cell.dataset.col];
+    let answer = mode === "add" ? row + col : mode === "sub" ? col - row : row * col;
+    if ((answer < 10 && currentAnswer.length === 1) || (answer >= 10 && currentAnswer.length === 2)) {
+      if (parseInt(currentAnswer) === answer) {
+        nextInput();
+      }
+    }
+  }
+
+  function finishGame() {
+    saveResult();
+    drawChart();
+  }
+
+  function saveResult() {
+    const key = `records_${mode}`;
+    const data = JSON.parse(localStorage.getItem(key) || "[]");
+    data.push(correctCount);
+    localStorage.setItem(key, JSON.stringify(data.slice(-100)));
+  }
+
+  function drawChart() {
+    const key = `records_${mode}`;
+    const data = JSON.parse(localStorage.getItem(key) || "[]");
+    const ctx = chartEl.getContext("2d");
+    if (window.resultChart) window.resultChart.destroy();
+    window.resultChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: data.map((_, i) => i + 1),
+        datasets: [{
+          label: mode === "add" ? "たしざんの記録" : mode === "sub" ? "ひきざんの記録" : "かけざんの記録",
+          data,
+          backgroundColor: '#ffcc00',
+          borderColor: '#ff9900',
+          borderWidth: 2,
+          fill: false
+        }]
+      },
+      options: {
+        responsive: true,
+        scales: { y: { suggestedMax: 120 } }
+      }
+    });
+  }
+
+  function createKeypad() {
+    keypad.innerHTML = "";
+    const layout = ["7", "8", "9", "4", "5", "6", "1", "2", "3", "0", "⌫", "Enter"];
+    layout.forEach(char => {
+      const btn = document.createElement("button");
+      btn.textContent = char;
+      btn.dataset.key = char;
+      keypad.appendChild(btn);
+    });
+  }
+
+  document.addEventListener("keydown", (e) => {
+    const cell = cells[currentInputIndex];
+    if (!cell || cell.dataset.enabled !== "true") return;
+
+    if (e.key >= "0" && e.key <= "9") {
+      currentAnswer += e.key;
+      updateCurrentCellDisplay();
+      checkAndMoveIfCorrect();
+    } else if (e.key === "Backspace") {
+      currentAnswer = currentAnswer.slice(0, -1);
+      updateCurrentCellDisplay();
+    } else if (e.key === "Enter") {
+      nextInput();
+    }
+  });
+
+  keypad.addEventListener("click", (e) => {
+    const cell = cells[currentInputIndex];
+    if (!cell || cell.dataset.enabled !== "true") return;
+
+    const key = e.target.dataset.key;
+    if (!key) return;
+
+    if (key === "⌫") {
+      currentAnswer = currentAnswer.slice(0, -1);
+      updateCurrentCellDisplay();
+    } else if (key === "Enter") {
+      nextInput();
+    } else {
+      if (currentAnswer.length < 2) {
+        currentAnswer += key;
+        updateCurrentCellDisplay();
+        checkAndMoveIfCorrect();
+      }
+    }
+  });
+
+  function enableAllCells() {
+    const cells = document.querySelectorAll('.cell');
+    cells.forEach(cell => {
+      cell.dataset.enabled = 'true';
+    });
+  }
+
+  document.getElementById('start-button').addEventListener('click', () => {
+    startTimer();
+    document.getElementById('start-container').style.display = 'none';
+    enableAllCells();
+    updateCurrentCellDisplay();
+  });
+
+  createKeypad();
+  startGame();
+</script>
+
+</body>
+</html>
